@@ -1,0 +1,2 @@
+based on a git project https://github.com/GeorgePik/POMCP
+added functionality to accept RDDL actions-fluents/state-fluents/nonfluents, types, objects

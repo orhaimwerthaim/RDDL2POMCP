@@ -1,30 +1,26 @@
 #This module describes a RDDL domain and instance file.
 
 
-# Objects:
-# Same as RDDL object parameters,
-# '':['']- is for fluentes that does not have any parameters
-#
-# for example:
-#  'location': ['$office','$lab','$hallway']
-#  'location' is the RDDL domain file 'types' block
-#  '$office','$lab','$hallway' are the different location objects as specified in the RDDL 'non-fluents' section in the 'objects' block.
+#Objects:
+#as specified at the RDDL 'non-fluents' section 'objects' block
+# a line in the rddle file:  location : {robot_lab,office,hallway};
+# will be translated to:     'location': ['$office','$lab','$hallway'],
 Objects={
     '':[''],
     'robot': ['$armadillo'],
-    'location': ['$office','$lab','$hallway'],
+    'location': ['$office','$lab','$hallway','$dummy'],
     'floor': ['$f1','$f2','$f3'],
     'obj': ['$can']}
 
 #NonFluentDef:
-#as specified at the domain file in the 'pvariables' block
+#as specified at the RDDL domain file in the 'pvariables' block
 # a line in the rddle file:  at_floor(location,floor): {non-fluent, bool, default = false };
 # will be translated to:     'at_floor': [('location','floor'),False]
 NonFluentDef = {
     'at_floor': [('location','floor'),False]}
 
 #StateFluentsDef:
-#as specified at the domain file in the 'pvariables' block
+#as specified at the RDDL domain file in the 'pvariables' block
 # a line in the rddle file:  object_at(obj,location): {state-fluent, bool, default = false };
 # will be translated to:     'object_at': [('obj','robot','location'),False]
 StateFluentsDef={
@@ -32,30 +28,58 @@ StateFluentsDef={
     'near': [('robot','location'),False],
     'pickable': [('obj',),False]}
 
-#ActionsDef:
+#InitNoneFluent:
+#as specified at the RDDL non-fluents section in the 'non-fluents' block
+# a line in the rddle file:  at_floor(office,f2);
+# will be translated to:     ('at_floor',('$office','$f2')):True,
+InitNoneFluent = {
+    ('at_floor',('$office','$f2')):True,
+    ('at_floor',('$lab','$f2')):True,
+    ('at_floor',('$hallway','$f2')):True,
+    ('at_floor',('$dummy','$f3')):True}
+
+
+#InitState:
+#as specified at the instance section in the 'init-state' block
+# a line in the rddle file:  near(armadillo,office);
+# will be translated to:     ('near',('$armadillo','$office')):True,
+InitState = {('near',('$armadillo','$office')):True,
+    ('object_at',('$can','$lab')):True,
+    ('pickable',('$can',)):True,
+             }
+
+#ActionsConstraints:
 #as specified at the domain file in the 'pvariables' block
+# a line in the rddle file:  pick(robot,obj,location): { action-fluent, bool, default = false };
+# will be translated to:     'pick':[('robot','obj','location'),False],
+#before an action is activated all action-constraints must be true, if not then it is not a legal action
+#supported logic operatores are '~','(',')','^','|','=>' (they will be handeled in this order)
+ActionsConstraints = [
+    [
+    ('for_all',(['robot','?r'],['location','?loc'],['location','?dest'],['floor','?f'])),
+    ('move',['?r','?loc','?dest','?f']),
+    ('=>',),
+    ('('),
+    ('near',['?r','?loc']),
+    ('^'),
+    ('at_floor',['?loc','?f']),
+    ('^'),
+    ('at_floor',['?dest','?f']),
+    (')')
+    ]
+    ]
+
+#ActionsDef:
+#as specified at the RDDL domain file in the 'pvariables' block
 # a line in the rddle file:  pick(robot,obj,location): { action-fluent, bool, default = false };
 # will be translated to:     'pick':[('robot','obj','location'),False],
 ActionsDef={
     'action':[('',),False],
     'pick':[('robot','obj','location'),False],
     'move':[('robot','location','location','floor'),False]}
-
-InitNoneFluent = {
-    ('at_floor',('$office','$f2')):True,
-    ('at_floor',('$lab','$f2')):True,
-    ('at_floor',('$hallway','$f2')):True}
-
-InitState = {('near',('$armadillo','$office')):True,
-    ('object_at',('$can','$lab')):True,
-    ('pickable',('$can',)):True,
-             }
-
-ActionsConstraints = [('robot',1),('obj',1),]
-
+import action_constraint as ac
 import itertools
 
-def validateActionConstrain(constraint, state):
 
 
 def updateFluents(fluents, updates):
@@ -76,26 +100,36 @@ def getGrounded(definitions):
             result[key] = [definition[1][1]]
     return result
 
+def merge_two_dicts(x, y):
+    z = x.copy()   # start with x's keys and values
+    z.update(y)    # modifies z with y's keys and values & returns None
+    return z
 # print('at_floor:')
 #for element in itertools.product(Objects['location'],Objects['floor']):
 #    print ('at_floor{}' .format(element))
+
 
 NonFluent = getGrounded(NonFluentDef)
 StateFluents = getGrounded(StateFluentsDef)
 Actions = getGrounded(ActionsDef)
 updateFluents(StateFluents, InitState)
 updateFluents(NonFluent, InitNoneFluent)
+print(Actions)
 
-print('before updating:')
-
-pick=[[key,value] for  key, value in StateFluents.items() if value == True]
-print(pick)
-
-updateFluents(StateFluents, InitState)
-print('before updating:')
-
-pick=[[key,value] for  key, value in StateFluents.items() if value == True]
-print(pick)
+gr_const, notGround = ac.groundContraint(ActionsConstraints[0], ('move', ('$armadillo', '$office', '$lab', '$f2')))
+state = merge_two_dicts(NonFluent, StateFluents)
+ac.validateGroundedConstraint(gr_const, state)
+print(ActionsConstraints)
+# print('before updating:')
+#
+# pick=[[key,value] for  key, value in StateFluents.items() if value == True]
+# print(pick)
+#
+# updateFluents(StateFluents, InitState)
+# print('before updating:')
+#
+# pick=[[key,value] for  key, value in StateFluents.items() if value == True]
+# print(pick)
 # for actDef in ActionsDef.items():
 #     action_objects= []
 #     for ObjectName in actDef[1][0]:
